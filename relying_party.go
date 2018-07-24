@@ -2,16 +2,15 @@ package main
 
 import (
 	"bytes"
-	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo"
+	"github.com/mvndaai/webauthn"
 	"github.com/nanobox-io/golang-scribble"
 	"github.com/ugorji/go/codec"
 )
@@ -67,11 +66,6 @@ func main() {
 	e.Logger.Fatal(e.Start(":8080"))
 }
 
-func logError(err error) error {
-	log.Println(err)
-	return err
-}
-
 func indexHandle(c echo.Context) error {
 	return c.File("index.html")
 }
@@ -81,15 +75,18 @@ func startRegistration(c echo.Context) error {
 
 	u := user{}
 	if err := json.NewDecoder(c.Request().Body).Decode(&u); err != nil {
-		return logError(err)
+		panic(err)
 	}
 	if u.Name == "" {
-		return logError(errors.New("username required"))
+		panic("username required")
 	}
 	// u.ID = uuid.New().String()
 	u.ID = base64Encode([]byte(uuid.New().String()))
 
-	chal := createChallenge()
+	chal, err := webauthn.NewChallenge()
+	if err != nil {
+		panic(err)
+	}
 	log.Printf("Saving registration data %#v challenge:%s", u, base64Encode(chal))
 	db.Write(dbColletion, u.Name, dbItem{user: u, challenge: chal})
 	r := startRegistrationResponse{
@@ -101,18 +98,22 @@ func startRegistration(c echo.Context) error {
 }
 
 func finishRegistration(c echo.Context) error {
-	b := finishRegistrationBody{}
+	// b := finishRegistrationBody{}
+	b := echo.Map{}
 	if err := c.Bind(&b); err != nil {
-		return logError(err)
+		panic(err)
 	}
-	log.Println("finish id:", b.ID)
-	log.Println("finish rawID:", b.RawID)
-	log.Println("finish type:", b.Type)
 
-	log.Printf("finish ClientDataJSON decode: %#v\n", decodeClientData(b.Response.ClientDataJSON))
-	log.Printf("finish AttestationObject: %#v\n", decodeAttestationObject(b.Response.AttestationObject))
+	log.Printf("body\n%#v\n", b)
 
-	decodeAttestationObject(b.Response.AttestationObject)
+	// log.Println("finish id:", b.ID)
+	// log.Println("finish rawID:", b.RawID)
+	// log.Println("finish type:", b.Type)
+
+	// log.Printf("finish ClientDataJSON decode: %#v\n", decodeClientData(b.Response.ClientDataJSON))
+	// log.Printf("finish AttestationObject: %#v\n", decodeAttestationObject(b.Response.AttestationObject))
+
+	// decodeAttestationObject(b.Response.AttestationObject)
 
 	// https://w3c.github.io/webauthn/#registering-a-new-credential
 
@@ -167,25 +168,16 @@ func listUsers(c echo.Context) error {
 
 	all, err := db.ReadAll(dbColletion)
 	if err != nil {
-		return logError(err)
+		panic(err)
 	}
 	for _, r := range all {
 		u := dbItem{}
 		if err := db.Read(dbColletion, r, &u); err != nil {
-			return logError(err)
+			panic(err)
 		}
 		users = append(users, u)
 	}
 	return c.JSON(http.StatusOK, users)
-}
-
-func createChallenge() []byte {
-	b := make([]byte, 32)
-	_, err := rand.Read(b)
-	if err != nil {
-		panic(err)
-	}
-	return b
 }
 
 func base64Encode(b []byte) string {
