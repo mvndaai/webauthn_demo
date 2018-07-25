@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -12,7 +11,6 @@ import (
 	"github.com/labstack/echo"
 	"github.com/mvndaai/webauthn"
 	"github.com/nanobox-io/golang-scribble"
-	"github.com/ugorji/go/codec"
 )
 
 var db *scribble.Driver
@@ -26,24 +24,11 @@ type (
 		DisplayName string `json:"displayName"`
 	}
 
-	startRegistrationResponse struct {
-		Challenge string `json:"challenge"`
-		User      user   `json:"user"`
-	}
-	finishRegistrationBody struct {
-		ID       string                        `json:"id"`
-		RawID    string                        `json:"rawID"`
-		Type     string                        `json:"type"`
-		Response finishRegistrationBodyResonse `json:"response"`
-	}
-	finishRegistrationBodyResonse struct {
-		AttestationObject string `json:"attestationObject"`
-		ClientDataJSON    string `json:"clientDataJSON"`
-	}
-
 	dbItem struct {
-		user      user
-		challenge []byte
+		User         user   `json:"user"`
+		Challenge    []byte `json:"challenge"`
+		CredentialID string `json:"credentialId"`
+		PublicKey    string `json:"publicKey"`
 	}
 )
 
@@ -53,14 +38,14 @@ func main() {
 	e := echo.New()
 	e.HideBanner = true
 	e.GET("/", indexHandle)
+
 	e.POST("/registration/start", startRegistration)
 	e.POST("/registration/finish", finishRegistration)
-
-	//Handle finish registration
-	//Handle start authentication
-	// Handle finish authentication
+	e.POST("/authentication/start", startAuthentication)
+	// e.POST("/authentication/finish", finishAuthentication)
 
 	e.GET("/users", listUsers)
+	// e.DELETE("/user/:username", deleteUser)
 
 	fmt.Println("Starting server on port :8080")
 	e.Logger.Fatal(e.Start(":8080"))
@@ -70,41 +55,80 @@ func indexHandle(c echo.Context) error {
 	return c.File("index.html")
 }
 
+type (
+	startRegistrationResponse struct {
+		Challenge string `json:"challenge"`
+		User      user   `json:"user"`
+	}
+)
+
 func startRegistration(c echo.Context) error {
 	log.Println("Starting a registration")
 
 	u := user{}
 	if err := json.NewDecoder(c.Request().Body).Decode(&u); err != nil {
-		panic(err)
+		return err
 	}
 	if u.Name == "" {
-		panic("username required")
+		return echo.NewHTTPError(http.StatusBadRequest, "username required")
 	}
 	// u.ID = uuid.New().String()
 	u.ID = base64Encode([]byte(uuid.New().String()))
 
 	chal, err := webauthn.NewChallenge()
 	if err != nil {
-		panic(err)
-	}
-	log.Printf("Saving registration data %#v challenge:%s", u, base64Encode(chal))
-	db.Write(dbColletion, u.Name, dbItem{user: u, challenge: chal})
-	r := startRegistrationResponse{
-		User:      u,
-		Challenge: base64Encode(chal),
+		return err
 	}
 
-	return c.JSON(http.StatusCreated, r)
+	log.Printf("Saving registration data %#v challenge:%s", u, base64Encode(chal))
+	err = db.Write(dbColletion, u.Name, dbItem{User: u, Challenge: chal})
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusCreated, startRegistrationResponse{
+		User:      u,
+		Challenge: base64Encode(chal),
+	})
 }
+
+type (
+	finishRegistrationBody struct {
+		ID       string                        `json:"id"`
+		RawID    string                        `json:"rawID"`
+		Type     string                        `json:"type"`
+		Response finishRegistrationBodyResonse `json:"response"`
+	}
+
+	finishRegistrationBodyResonse struct {
+		AttestationObject string `json:"attestationObject"`
+		ClientDataJSON    string `json:"clientDataJSON"`
+	}
+)
 
 func finishRegistration(c echo.Context) error {
 	// b := finishRegistrationBody{}
 	b := echo.Map{}
 	if err := c.Bind(&b); err != nil {
-		panic(err)
+		return err
 	}
 
 	log.Printf("body\n%#v\n", b)
+
+	entry := dbItem{}
+	err := db.Read(dbColletion, "mvndaai", &entry)
+	if err != nil {
+		return err
+	}
+	entry.Challenge = []byte{}
+	entry.CredentialID = "rawId"
+	entry.PublicKey = "pubkey"
+	log.Printf("entry %#v", entry)
+
+	err = db.Write(dbColletion, "mvndaai", entry)
+	if err != nil {
+		return err
+	}
 
 	// log.Println("finish id:", b.ID)
 	// log.Println("finish rawID:", b.RawID)
@@ -121,63 +145,55 @@ func finishRegistration(c echo.Context) error {
 }
 
 type (
-	// https://developer.mozilla.org/en-US/docs/Web/API/AuthenticatorResponse/clientDataJSON
-	clientData struct {
-		Type      string `json:"type"`      // "webauthn.create" or "webauthn.get"
-		Challenge string `json:"challenge"` // base64 encoded String containing the original challenge
-		Origin    string `json:"origin"`    // the window.origin
+	startAuthBody struct {
+		Username string `json:"username"`
+	}
+
+	startAuthResponse struct {
+		Challenge    string `json:"challenge"`
+		CredentialID string `json:"credentialId"`
 	}
 )
 
-func decodeClientData(s string) clientData {
-	c := clientData{}
-	b := base64Decode(s)
-	if err := json.Unmarshal(b, &c); err != nil {
-		panic(err)
-	}
-	return c
-}
-
-type (
-	attStmt struct {
-		Sig []uint8       `json:"sig"`
-		X5c []interface{} `json:"x5c"`
+func startAuthentication(c echo.Context) error {
+	b := startAuthBody{}
+	if err := c.Bind(&b); err != nil {
+		return err
 	}
 
-	// https://developer.mozilla.org/en-US/docs/Web/API/AuthenticatorAttestationResponse/attestationObject
-	attestation struct {
-		Fmt      string  `json:"fmt"`
-		AuthData []byte  `json:"authData"`
-		AttStmt  attStmt `json:"attStmt"`
-	}
-)
-
-func decodeAttestationObject(s string) attestation {
-	cbor := codec.CborHandle{}
-	a := attestation{}
-	dec := codec.NewDecoder(bytes.NewReader(base64Decode(s)), &cbor)
-	err := dec.Decode(&a)
+	entry := dbItem{}
+	err := db.Read(dbColletion, b.Username, &entry)
 	if err != nil {
-		panic(err)
+		return err
 	}
-	return a
+
+	chal, err := webauthn.NewChallenge()
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusCreated, startAuthResponse{
+		Challenge:    base64Encode(chal),
+		CredentialID: entry.CredentialID,
+	})
 }
 
 func listUsers(c echo.Context) error {
-	users := []dbItem{}
-
-	all, err := db.ReadAll(dbColletion)
+	records, err := db.ReadAll(dbColletion)
 	if err != nil {
 		panic(err)
 	}
-	for _, r := range all {
-		u := dbItem{}
-		if err := db.Read(dbColletion, r, &u); err != nil {
+
+	items := []dbItem{}
+	for _, r := range records {
+		item := dbItem{}
+		if err := json.Unmarshal([]byte(r), &item); err != nil {
 			panic(err)
 		}
-		users = append(users, u)
+		items = append(items, item)
 	}
-	return c.JSON(http.StatusOK, users)
+
+	return c.JSON(http.StatusOK, items)
 }
 
 func base64Encode(b []byte) string {
