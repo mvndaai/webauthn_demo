@@ -1,76 +1,88 @@
 <!DOCTYPE html>
 <html>
-    <head><title>WebAuthN</title></head>
+    <head>
+        <title>WebAuthN</title>
+        <style type="text/css">
+            thead td { width: 200px; }
+            td {
+                max-width: 180px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .banner {
+                min-height: 18px;
+                text-align: center;
+                background-color: lightgray;
+            }
+        </style>
+    </head>
     <body>
         <script src="https://rawgit.com/paroga/cbor-js/master/cbor.js" type="text/javascript"></script>
         <script src="https://rawgit.com/mvndaai/webauthn/master/webauthn-helper.js" type="text/javascript"></script>
         <script src='//unpkg.com/mithril/mithril.js'></script>
         <script>
+            let bannerText = '';
+            function updateBannerText(...s) { console.log(...s); bannerText = s.join('-'); }
+            let users = [];
+            function updateUsers() { return m.request('/users').then(r => users = r); }
+
             const fingerPrintTimeout = 10000;
 
             function register(username, displayName) {
-                console.log("Attempting to register");
+                updateBannerText("Attempting to register", username, displayName);
                 m.request({
-                    method: "POST",
-                    url: "/registration/start",
-                    data: {
-                        name: username,
-                        displayName: displayName,
-                    }
+                    method: "POST", url: "/registration/start",
+                    data: { name: username, displayName: displayName }
                 })
                 .then(r => {
-                    console.log('userid', r.user.id);
                     var credArgs = {
+                        toArrayBuffer: [
+                            {
+                                keyPath: ['publicKey', 'user', 'id'],
+                                value: r.user.id
+                            },
+                            {
+                                keyPath: ['publicKey', 'challenge'],
+                                value: r.challenge
+                            }
+                        ],
                         publicKey: {
                             rp: { name: "mvndaai-webauth-demo" },// Relying Party
                             pubKeyCredParams: [{ type: "public-key", alg: -7 }],
                             attestation: "direct",
                             timeout: fingerPrintTimeout,
                             user: {
-                                // id: Uint8Array.from(r.user.id, c => c.charCodeAt(0)).buffer,
-                                id: webauthn.strToBin(r.user.id).buffer,
                                 name: r.user.name,
                                 displayName: r.user.displayName,
                             },
-                            challenge: webauthn.strToBin(r.challenge).buffer,
                         }
                     };
 
-                    sessionStorage.setItem('challenge', r.challenge);
-
-
-                    console.log('r.challenge', r.challenge);
-                    // console.log('r.challenge btoa', btoa(r.challenge));
-                    // console.log('r.challenge atob', atob(r.challenge));
-                    // console.log('credArgs.publicKey.challenge', credArgs.publicKey.challenge);
-                    console.log('credArgs', credArgs)
-                    return navigator.credentials.create(credArgs);
+                    sessionStorage.setItem('challenge', credArgs.publicKey.challenge);
+                    return navigator.credentials.create(webauthn.buildPublicKey(credArgs));
                 })
-                .then(attestation => { // https://developer.mozilla.org/en-US/docs/Web/API/PublicKeyCredential
-                    // console.log("NEW CREDENTIAL", attestation);
-                    if (!attestation.response) {
-                    // addErrorMsg("Make Credential response lacking 'response' attribute");
-                    }
-                    console.log('attestation', attestation);
+                .then(r => { // https://developer.mozilla.org/en-US/docs/Web/API/PublicKeyCredential
+                    // JavaScript decode clientDataJSON
+                    // JSON.parse(atob(webauthn.binToStr(r.response.clientDataJSON)));
 
-                    // console.log("id", attestation.id);
-                    // console.log("id base64", atob(attestation.id));
-                    // console.log('rawId', atob(binToStr(attestation.rawId)));
+                    // JavaScript decode attestationObject
+                    // CBOR.decode(r.response.attestationObject);
 
+                    console.log(r);
                     let cred = {response: {}};
-                    if ('id' in attestation) cred.id = attestation.id;
-                    if ('type' in attestation) cred.type = attestation.type;
-                    if ('rawId' in attestation) cred.rawId = webauthn.binToStr(attestation.rawId);
-                    cred.response.clientDataJSON = webauthn.binToStr(attestation.response.clientDataJSON);
-                    cred.response.attestationObject = webauthn.binToStr(attestation.response.attestationObject);
+                    if ('id' in r) cred.id = r.id;
+                    if ('type' in r) cred.type = r.type;
+                    if ('rawId' in r) cred.rawId = webauthn.binToStr(r.rawId);
+                    cred.response.clientDataJSON = webauthn.binToStr(r.response.clientDataJSON);
+                    cred.response.attestationObject = webauthn.binToStr(r.response.attestationObject);
                     console.log('cred', cred)
 
                     sessionStorage.getItem('challenge');
-                    sessionStorage.setItem('rawId', webauthn.binToStr(attestation.rawId));
+                    sessionStorage.setItem('rawId', webauthn.binToStr(r.rawId));
 
 
                     // JavaScript print clientDataJSON
-                    let clientDataJSON = JSON.parse(atob(cred.response.clientDataJSON));
+                    // let clientDataJSON = JSON.parse(atob(webauthn.binToStr(attestation.response.clientDataJSON)));
                     // console.log(JSON.stringify(clientDataJSON));
                     // let exampleClientDataJSON = {
                     //     "challenge": "MHivbnh7JuW1RxmvXQHgleZctX2LeTzajHnFJR5dC6k",
@@ -78,7 +90,6 @@
                     //     "origin": "https://wet-grasshopper-0.telebit.cloud",
                     //     "type": "webauthn.create"
                     // }
-                    console.log('challenge match', sessionStorage.getItem('challenge') === clientDataJSON.challenge, sessionStorage.getItem('challenge'), clientDataJSON.challenge)
 
                     // JavaScript print attestationObject
                     // let attestationObject = CBOR.decode(attestation.response.attestationObject);
@@ -91,62 +102,21 @@
                     //     },
                     //     "authData":{"0":222,"1":18,"2":76,"3":101,"4":192,"5":156,"6":182,"7":184,"8":235,"9":237,"10":150,"11":40,"12":96,"13":225,"14":34,"15":50,"16":49,"17":153,"18":142,"19":246,"20":183,"21":25,"22":159,"23":128,"24":236,"25":224,"26":219,"27":164,"28":137,"29":113,"30":128,"31":251,"32":69,"33":91,"34":84,"35":15,"36":119,"37":173,"38":206,"39":0,"40":2,"41":53,"42":188,"43":198,"44":10,"45":100,"46":139,"47":11,"48":37,"49":241,"50":240,"51":85,"52":3,"53":0,"54":90,"55":0,"56":131,"57":99,"58":143,"59":14,"60":78,"61":87,"62":71,"63":29,"64":231,"65":182,"66":14,"67":88,"68":242,"69":122,"70":240,"71":137,"72":121,"73":111,"74":100,"75":252,"76":109,"77":104,"78":33,"79":28,"80":123,"81":114,"82":197,"83":199,"84":68,"85":89,"86":26,"87":181,"88":154,"89":5,"90":140,"91":57,"92":62,"93":212,"94":122,"95":209,"96":163,"97":136,"98":178,"99":70,"100":254,"101":173,"102":43,"103":65,"104":126,"105":228,"106":92,"107":68,"108":141,"109":12,"110":202,"111":111,"112":141,"113":191,"114":116,"115":5,"116":71,"117":77,"118":204,"119":114,"120":47,"121":53,"122":125,"123":28,"124":161,"125":126,"126":47,"127":144,"128":28,"129":236,"130":42,"131":72,"132":191,"133":226,"134":122,"135":109,"136":231,"137":253,"138":79,"139":191,"140":41,"141":64,"142":63,"143":244,"144":141,"145":165,"146":1,"147":2,"148":3,"149":38,"150":32,"151":1,"152":33,"153":88,"154":32,"155":224,"156":234,"157":4,"158":56,"159":142,"160":6,"161":30,"162":22,"163":185,"164":201,"165":20,"166":171,"167":32,"168":39,"169":36,"170":78,"171":201,"172":170,"173":84,"174":81,"175":249,"176":90,"177":70,"178":73,"179":144,"180":199,"181":88,"182":190,"183":80,"184":13,"185":44,"186":110,"187":34,"188":88,"189":32,"190":33,"191":1,"192":172,"193":193,"194":174,"195":85,"196":87,"197":225,"198":10,"199":57,"200":144,"201":213,"202":65,"203":248,"204":82,"205":201,"206":103,"207":15,"208":249,"209":77,"210":210,"211":201,"212":217,"213":6,"214":101,"215":195,"216":94,"217":135,"218":62,"219":157,"220":3,"221":127}
                     // }
-
                     return m.request({
-                        url: '/registration/finish',
-                        method: 'POST',
+                        method: 'POST', url: '/registration/finish',
                         data: cred,
                     });
                 })
                 .then(r => {
                     console.log(r);
-                    //   }).then(parameters => {
-                    //     console.log(parameters);
-
-                    //     if (parameters && parameters.success) {
-                    //       addSuccessMsg(parameters.message);
-                    //       fetchCredentials();
-                    //     } else {
-                    //       throw 'Unexpected response received.';
-                    //     }
-                    //   }
+                    updateBannerText('Registration complete', username);
+                    updateUsers();
                 })
                 .catch(e => {
-                    console.log('e', e);
-                    console.error(e)});
-            }
-
-            function login(username){
-
-                m.request({
-                    method: "POST",
-                    url: "/authentication/start",
-                    data: { username: username }
-                }).then(o => {
-                    let getCredentialArgs = {
-                        publicKey: {
-                            timeout: 60000,
-                            challenge: webauthn.strToBin(o.challenge).buffer,
-                            allowCredentials : [{
-                                id: webauthn.strToBin(o.credentialId).buffer,
-                                transports: ["usb", "nfc", "ble"],
-                                type: "public-key"
-                            }],
-                        },
-                    };
-                    console.log("what", getCredentialArgs);
-                    return navigator.credentials.get(getCredentialArgs)
-                })
-                .then((assertion) => {
-                    console.log("ASSERTION", assertion);
-                })
-                .catch((err) => {
-                    console.log("ERROR", err);
-                })
-            };
-
-            function removeCred(username) {
-                console.log("removing credential" , username)
+                    bannerText = e.toString();
+                    console.error(e)
+                    updateUsers();
+                });
             }
 
             const RegisterUser = {
@@ -167,6 +137,43 @@
                 ])
             }
 
+            function login(username){
+                m.request({
+                    method: "POST", url: "/authentication/start",
+                    data: { username: username }
+                }).then(o => {
+                    let getCredentialArgs = {
+                        publicKey: {
+                            timeout: 60000,
+                            challenge: webauthn.strToBin(o.challenge).buffer,
+                            allowCredentials : [{
+                                id: webauthn.strToBin(o.credentialId).buffer,
+                                transports: ["usb", "nfc", "ble"],
+                                type: "public-key"
+                            }],
+                        },
+                    };
+                    console.log("what", getCredentialArgs);
+                    return navigator.credentials.get(getCredentialArgs)
+                })
+                .then((assertion) => {
+                    console.log("ASSERTION", assertion);
+                    updateUsers()
+
+
+                    return m.request({
+                        method: "POST", url: "/authentication/finish",
+                        data: assertion
+                    });
+                })
+                .then(r => console.log(r))
+                .catch((err) => {
+                    bannerText = e.toString();
+                    console.error(e);
+                    updateUsers();
+                })
+            };
+
             const LoginAsUser = {
                 username: sessionStorage.getItem('loginUsername'),
                 view: vnode => m("", [
@@ -180,27 +187,36 @@
                 ])
             }
 
-            const RemoveCredential = {
-                username: sessionStorage.getItem('removeUsername'),
-                view: vnode => m("", [
-                    m('h2', "Remove Credential"),
-                    m('label', 'Username', m('input', {
-                        autocapitalize:"off",
-                        value: vnode.state.username,
-                        oninput: e => sessionStorage.setItem('loginUsername', vnode.state.username = e.target.value),
-                    })), m('br'),
-                    m('button', {onclick: _ => removeCred(vnode.state.username)},'remove credential')
-                ])
+            function deleteUser(username) {
+                console.log('Deleting user:', username)
+                return m.request({method:'DELETE', url: `/users/${username}`}).then(_ => updateUsers());
             }
 
+            const Userlist = {
+                view: vnode => m('', [
+                m('h2', "Registered users"),
+                    m('table', [
+                        m('thead', ['Username', 'Display Name', 'Challenge', 'Credential Id', 'Public Key', ''].map(v => m('td', v))),
+                        m('tbody', users.map(u => m('tr',[
+                            u.user.name, u.user.displayName, u.challenge, u.credentialId, u.publicKey,
+                            m('button', {onclick: _ => deleteUser(u.user.name) },'delete')
+                        ].map(v => m('td', v))),
+                        ))
+                    ])
+                ])
+            };
+
             const Layout = {
+                oninit: updateUsers(),
                 view: _ => m('', [
+                    m('.banner', bannerText),
                     m('h1', 'WebAuthN'),
                     m(RegisterUser),
                     m(LoginAsUser),
-                    m(RemoveCredential),
+                    (users.length !== 0) && m(Userlist),
                 ])
             };
+
             m.mount(document.body, Layout);
         </script>
     </body>

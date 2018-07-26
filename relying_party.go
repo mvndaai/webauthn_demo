@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
+	"flag"
 	"log"
 	"net/http"
 
@@ -12,6 +12,9 @@ import (
 	"github.com/mvndaai/webauthn"
 	"github.com/nanobox-io/golang-scribble"
 )
+
+var port = flag.String("port", ":8080", "Port the server starts on")
+var timeout = flag.Int("timeout", 6000, "Time till auth timeout in ms")
 
 var db *scribble.Driver
 
@@ -33,6 +36,7 @@ type (
 )
 
 func main() {
+	flag.Parse()
 	initDatabase()
 
 	e := echo.New()
@@ -45,10 +49,9 @@ func main() {
 	// e.POST("/authentication/finish", finishAuthentication)
 
 	e.GET("/users", listUsers)
-	// e.DELETE("/user/:username", deleteUser)
+	e.DELETE("/users/:username", deleteUser)
 
-	fmt.Println("Starting server on port :8080")
-	e.Logger.Fatal(e.Start(":8080"))
+	e.Logger.Fatal(e.Start(*port))
 }
 
 func indexHandle(c echo.Context) error {
@@ -63,8 +66,6 @@ type (
 )
 
 func startRegistration(c echo.Context) error {
-	log.Println("Starting a registration")
-
 	u := user{}
 	if err := json.NewDecoder(c.Request().Body).Decode(&u); err != nil {
 		return err
@@ -72,15 +73,15 @@ func startRegistration(c echo.Context) error {
 	if u.Name == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "username required")
 	}
-	// u.ID = uuid.New().String()
 	u.ID = base64Encode([]byte(uuid.New().String()))
+	log.Println("Starting registation for:", u.Name)
 
 	chal, err := webauthn.NewChallenge()
 	if err != nil {
 		return err
 	}
 
-	log.Printf("Saving registration data %#v challenge:%s", u, base64Encode(chal))
+	// log.Printf("Saving registration data %#v challenge:%s", u, base64Encode(chal))
 	err = db.Write(dbColletion, u.Name, dbItem{User: u, Challenge: chal})
 	if err != nil {
 		return err
@@ -181,19 +182,29 @@ func startAuthentication(c echo.Context) error {
 func listUsers(c echo.Context) error {
 	records, err := db.ReadAll(dbColletion)
 	if err != nil {
-		panic(err)
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
-
+	if len(records) == 0 {
+		return echo.NewHTTPError(http.StatusNotFound, "No users found")
+	}
 	items := []dbItem{}
 	for _, r := range records {
 		item := dbItem{}
 		if err := json.Unmarshal([]byte(r), &item); err != nil {
-			panic(err)
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 		}
 		items = append(items, item)
 	}
-
 	return c.JSON(http.StatusOK, items)
+}
+
+func deleteUser(c echo.Context) error {
+	username := c.Param("user")
+	log.Println("Deleting user:", username)
+	if err := db.Delete(dbColletion, username); err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, err.Error())
+	}
+	return c.NoContent(http.StatusNoContent)
 }
 
 func base64Encode(b []byte) string {
