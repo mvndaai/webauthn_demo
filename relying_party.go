@@ -99,19 +99,20 @@ func startRegistration(c echo.Context) error {
 		},
 	}
 	return c.JSON(http.StatusCreated, r)
-
-	// return c.JSON(http.StatusCreated, startRegistrationResponse{
-	// 	User:      u,
-	// 	Challenge: base64Encode(chal),
-	// })
 }
 
 type (
+	// finishRegistrationBody struct {
+	// 	ID       string                        `json:"id"`
+	// 	RawID    string                        `json:"rawID"`
+	// 	Type     string                        `json:"type"`
+	// 	Response finishRegistrationBodyResonse `json:"response"`
+	// }
 	finishRegistrationBody struct {
-		ID       string                        `json:"id"`
-		RawID    string                        `json:"rawID"`
-		Type     string                        `json:"type"`
-		Response finishRegistrationBodyResonse `json:"response"`
+		//Type ?
+		CredentialID      string `json:"credentialId"`
+		ClientDataJSON    string `json:"clientDataJSON"`
+		AttestationObject string `json:"attestationObject"`
 	}
 
 	finishRegistrationBodyResonse struct {
@@ -121,8 +122,8 @@ type (
 )
 
 func finishRegistration(c echo.Context) error {
-	// b := finishRegistrationBody{}
-	b := echo.Map{}
+	b := finishRegistrationBody{}
+	// b := echo.Map{}
 	if err := c.Bind(&b); err != nil {
 		return err
 	}
@@ -135,7 +136,7 @@ func finishRegistration(c echo.Context) error {
 		return err
 	}
 	entry.Challenge = []byte{}
-	entry.CredentialID = "rawId"
+	entry.CredentialID = b.CredentialID
 	entry.PublicKey = "pubkey"
 	log.Printf("entry %#v", entry)
 

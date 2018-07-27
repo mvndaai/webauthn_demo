@@ -39,11 +39,10 @@
                 })
                 .then(r => { // https://developer.mozilla.org/en-US/docs/Web/API/PublicKeyCredential
                     // JavaScript decode clientDataJSON
-                    // var a = JSON.parse(atob(webauthn.binToStr(r.response.clientDataJSON)));
-                    // console.log('clientData', a)
+                    // console.log('clientData', JSON.parse(atob(webauthn.binToStr(r.response.clientDataJSON))))
+
                     // JavaScript decode attestationObject
-                    // var a = CBOR.decode(r.response.attestationObject);
-                    // console.log('cbor', a)
+                    // console.log('attestationObject', CBOR.decode(r.response.attestationObject))
 
                     console.log(r);
                     let cred = {response: {}};
@@ -56,6 +55,12 @@
 
                     sessionStorage.getItem('challenge');
                     sessionStorage.setItem('rawId', webauthn.binToStr(r.rawId));
+
+                    let body = {
+                        credentialId: webauthn.binToStr(r.rawId),
+                        clientDataJSON: webauthn.binToStr(r.response.clientDataJSON),
+                        attestationObject: webauthn.binToStr(r.response.attestationObject)
+                    };
 
 
                     // JavaScript print clientDataJSON
@@ -81,7 +86,8 @@
                     // }
                     return m.request({
                         method: 'POST', url: '/registration/finish',
-                        data: cred,
+                        // data: cred,
+                        data: body,
                     });
                 })
                 .then(r => {
