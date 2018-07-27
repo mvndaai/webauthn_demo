@@ -21,17 +21,11 @@ var db *scribble.Driver
 const dbColletion = "users"
 
 type (
-	user struct {
-		ID          string `json:"id"`
-		Name        string `json:"name"`
-		DisplayName string `json:"displayName"`
-	}
-
 	dbItem struct {
-		User         user   `json:"user"`
-		Challenge    []byte `json:"challenge"`
-		CredentialID string `json:"credentialId"`
-		PublicKey    string `json:"publicKey"`
+		User         webauthn.UserEntity `json:"user"`
+		Challenge    []byte              `json:"challenge"`
+		CredentialID string              `json:"credentialId"`
+		PublicKey    string              `json:"publicKey"`
 	}
 )
 
@@ -60,22 +54,21 @@ func indexHandle(c echo.Context) error {
 
 type (
 	startRegistrationResponse struct {
-		Challenge string `json:"challenge"`
-		User      user   `json:"user"`
+		Challenge string              `json:"challenge"`
+		User      webauthn.UserEntity `json:"user"`
 	}
 )
 
 func startRegistration(c echo.Context) error {
-	u := user{}
+	u := webauthn.UserEntity{}
 	if err := json.NewDecoder(c.Request().Body).Decode(&u); err != nil {
 		return err
 	}
 	if u.Name == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "username required")
 	}
-	u.ID = base64Encode([]byte(uuid.New().String()))
-	log.Println("Starting registation for:", u.Name)
 
+	log.Println("Starting registation for:", u.Name)
 	chal, err := webauthn.NewChallenge()
 	if err != nil {
 		return err
@@ -87,10 +80,30 @@ func startRegistration(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusCreated, startRegistrationResponse{
-		User:      u,
-		Challenge: base64Encode(chal),
-	})
+	u.ID = uuid.New().String()
+	r := webauthn.RegistrationParts{
+		ToArrayBuffter: webauthn.BuildToArrayBuffer(chal, u.ID),
+		PublicKey: webauthn.PublicKeyCredentialOptions{
+			RP: webauthn.RpEntity{
+				Name: "mvndaai-webauth-demo",
+			},
+			PubKeyCredParams: []webauthn.Parameters{
+				webauthn.Parameters{
+					Type: webauthn.PublicKeyCredentialTypePublicKey,
+					Alg:  -7,
+				},
+			},
+			Timeout:     50000,
+			User:        u,
+			Attestation: "direct",
+		},
+	}
+	return c.JSON(http.StatusCreated, r)
+
+	// return c.JSON(http.StatusCreated, startRegistrationResponse{
+	// 	User:      u,
+	// 	Challenge: base64Encode(chal),
+	// })
 }
 
 type (

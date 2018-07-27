@@ -12,7 +12,8 @@
             .banner {
                 min-height: 18px;
                 text-align: center;
-                background-color: lightgray;
+                background-color: black;
+                color: white;
             }
         </style>
     </head>
@@ -26,8 +27,6 @@
             let users = [];
             function updateUsers() { return m.request('/users').then(r => users = r); }
 
-            const fingerPrintTimeout = 10000;
-
             function register(username, displayName) {
                 updateBannerText("Attempting to register", username, displayName);
                 m.request({
@@ -35,38 +34,16 @@
                     data: { name: username, displayName: displayName }
                 })
                 .then(r => {
-                    var credArgs = {
-                        toArrayBuffer: [
-                            {
-                                keyPath: ['publicKey', 'user', 'id'],
-                                value: r.user.id
-                            },
-                            {
-                                keyPath: ['publicKey', 'challenge'],
-                                value: r.challenge
-                            }
-                        ],
-                        publicKey: {
-                            rp: { name: "mvndaai-webauth-demo" },// Relying Party
-                            pubKeyCredParams: [{ type: "public-key", alg: -7 }],
-                            attestation: "direct",
-                            timeout: fingerPrintTimeout,
-                            user: {
-                                name: r.user.name,
-                                displayName: r.user.displayName,
-                            },
-                        }
-                    };
-
-                    sessionStorage.setItem('challenge', credArgs.publicKey.challenge);
-                    return navigator.credentials.create(webauthn.buildPublicKey(credArgs));
+                    sessionStorage.setItem('challenge', r.publicKey.challenge);
+                    return navigator.credentials.create(webauthn.buildPublicKey(r));
                 })
                 .then(r => { // https://developer.mozilla.org/en-US/docs/Web/API/PublicKeyCredential
                     // JavaScript decode clientDataJSON
-                    // JSON.parse(atob(webauthn.binToStr(r.response.clientDataJSON)));
-
+                    // var a = JSON.parse(atob(webauthn.binToStr(r.response.clientDataJSON)));
+                    // console.log('clientData', a)
                     // JavaScript decode attestationObject
-                    // CBOR.decode(r.response.attestationObject);
+                    // var a = CBOR.decode(r.response.attestationObject);
+                    // console.log('cbor', a)
 
                     console.log(r);
                     let cred = {response: {}};

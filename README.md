@@ -43,3 +43,8 @@ docker build -t webauthndemo . && docker run -p 127.0.0.1:8080:8080 -it webauthn
 ```
 
 Use [telebit](https://telebit.cloud/) or howereve else you want to make the site avaliable on a mobile device
+
+
+# Spec Variables
+
+https://w3c.github.io/webauthn/#idl-index
