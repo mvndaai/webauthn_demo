@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
     <head>
-        <title>WebAuthN</title>
+        <title>WebAuthN Demo</title>
         <style type="text/css">
             thead td { width: 200px; }
             td {
@@ -57,11 +57,11 @@
                     sessionStorage.setItem('rawId', webauthn.binToStr(r.rawId));
 
                     let body = {
+                        type: r.type,
                         credentialId: webauthn.binToStr(r.rawId),
                         clientDataJSON: webauthn.binToStr(r.response.clientDataJSON),
                         attestationObject: webauthn.binToStr(r.response.attestationObject)
                     };
-
 
                     // JavaScript print clientDataJSON
                     // let clientDataJSON = JSON.parse(atob(webauthn.binToStr(attestation.response.clientDataJSON)));

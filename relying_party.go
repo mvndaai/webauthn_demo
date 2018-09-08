@@ -33,6 +33,23 @@ func main() {
 	flag.Parse()
 	initDatabase()
 
+	//TOOD temp
+	// b := webauthn.ParsedRegistrationResponse{
+	// 	Type:              "public-key",
+	// 	CredentialID:      "AJNp99XP4fp1UXFPgGsVNP9xjHf2XkGS73PZ+gdDms9leSLXnROcx7YXEh/BqY7bW6/k4bFvCJEveJ21tdKk16wnOKnUn+khWLZt8xuJS2U=",
+	// 	ClientDataJSON:    "eyJjaGFsbGVuZ2UiOiJOalF6WldZM01EZ3RPR0ZqT1MwMFl6WTVMV0UzTnpRdE9XTTNPR1F5TTJGbE1qYzUiLCJvcmlnaW4iOiJodHRwOi8vbG9jYWxob3N0OjgwODAiLCJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIn0=",
+	// 	AttestationObject: "o2NmbXRoZmlkby11MmZnYXR0U3RtdKJjc2lnWEcwRQIhAJ9IEGmFulCkcRaamRp9OyGPM84Pye2royyqs62XgZfhAiBswQUYuuu9yUIVoeulbpplBdwa0oii/k4RyuQ1UFWog2N4NWOAaGF1dGhEYXRhWNRJlg3liA6MaHQ0Fw9kdmBbj+SuuaKGMseZXPO6gx2XY0VbXRJ5rc4AAjW8xgpkiwsl8fBVAwBQAJNp99XP4fp1UXFPgGsVNP9xjHf2XkGS73PZ+gdDms9leSLXnROcx7YXEh/BqY7bW6/k4bFvCJEveJ21tdKk16wnOKnUn+khWLZt8xuJS2WlAQIDJiABIVggRJ5Wbf462wADcoZm7N4GnsRZGUfgkqNy3afGujC/mHQiWCB/HbeQep7fe++SJZ/NcRH9k2mu4fGuvx2snhNqoryG5Q==",
+	// }
+	// chal := []byte{0xa, 0xa, 0xb, 0xd3, 0x61, 0x7a, 0x8a, 0xfa, 0x52, 0x25, 0x64, 0xa9, 0x65, 0x96, 0x18, 0x6, 0x31, 0xcd, 0xca, 0x78, 0xab, 0x41, 0x16, 0x16, 0x77, 0xd4, 0x93, 0xe9, 0x88, 0x54, 0xf9, 0xeb}
+	// if _, err := webauthn.IsValidRegistration(b, chal, "http://localhost:8080"); err != nil {
+	// 	log.Println("Error", err)
+	// }
+
+	// if true {
+	// 	return
+	// }
+	//TODO temp..
+
 	e := echo.New()
 	e.HideBanner = true
 	e.GET("/", indexHandle)
@@ -108,12 +125,12 @@ type (
 	// 	Type     string                        `json:"type"`
 	// 	Response finishRegistrationBodyResonse `json:"response"`
 	// }
-	finishRegistrationBody struct {
-		//Type ?
-		CredentialID      string `json:"credentialId"`
-		ClientDataJSON    string `json:"clientDataJSON"`
-		AttestationObject string `json:"attestationObject"`
-	}
+	// finishRegistrationBody struct {
+	// 	//Type ?
+	// 	CredentialID      string `json:"credentialId"`
+	// 	ClientDataJSON    string `json:"clientDataJSON"`
+	// 	AttestationObject string `json:"attestationObject"`
+	// }
 
 	finishRegistrationBodyResonse struct {
 		AttestationObject string `json:"attestationObject"`
@@ -122,7 +139,7 @@ type (
 )
 
 func finishRegistration(c echo.Context) error {
-	b := finishRegistrationBody{}
+	b := webauthn.ParsedRegistrationResponse{}
 	// b := echo.Map{}
 	if err := c.Bind(&b); err != nil {
 		return err
@@ -135,8 +152,10 @@ func finishRegistration(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	webauthn.IsValidRegistration(b, entry.Challenge, "http://localhost:8080")
+
 	entry.Challenge = []byte{}
-	entry.CredentialID = b.CredentialID
+	entry.CredentialID = string(b.CredentialID)
 	entry.PublicKey = "pubkey"
 	log.Printf("entry %#v", entry)
 
