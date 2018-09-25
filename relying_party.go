@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -41,7 +42,7 @@ func main() {
 	// 	AttestationObject: "o2NmbXRoZmlkby11MmZnYXR0U3RtdKJjc2lnWEcwRQIhAJ9IEGmFulCkcRaamRp9OyGPM84Pye2royyqs62XgZfhAiBswQUYuuu9yUIVoeulbpplBdwa0oii/k4RyuQ1UFWog2N4NWOAaGF1dGhEYXRhWNRJlg3liA6MaHQ0Fw9kdmBbj+SuuaKGMseZXPO6gx2XY0VbXRJ5rc4AAjW8xgpkiwsl8fBVAwBQAJNp99XP4fp1UXFPgGsVNP9xjHf2XkGS73PZ+gdDms9leSLXnROcx7YXEh/BqY7bW6/k4bFvCJEveJ21tdKk16wnOKnUn+khWLZt8xuJS2WlAQIDJiABIVggRJ5Wbf462wADcoZm7N4GnsRZGUfgkqNy3afGujC/mHQiWCB/HbeQep7fe++SJZ/NcRH9k2mu4fGuvx2snhNqoryG5Q==",
 	// }
 	// chal := []byte{0xa, 0xa, 0xb, 0xd3, 0x61, 0x7a, 0x8a, 0xfa, 0x52, 0x25, 0x64, 0xa9, 0x65, 0x96, 0x18, 0x6, 0x31, 0xcd, 0xca, 0x78, 0xab, 0x41, 0x16, 0x16, 0x77, 0xd4, 0x93, 0xe9, 0x88, 0x54, 0xf9, 0xeb}
-	// if _, err := webauthn.IsValidRegistration(b, chal, "http://localhost:8080"); err != nil {
+	// if _, err := webauthn.IsValidRegistration(b, chal, "http://localhost:8080", false); err != nil {
 	// 	log.Println("Error", err)
 	// }
 
@@ -52,12 +53,21 @@ func main() {
 
 	e := echo.New()
 	e.HideBanner = true
+	e.HTTPErrorHandler = func(err error, c echo.Context) {
+		if he, ok := err.(*echo.HTTPError); ok {
+			c.String(he.Code, fmt.Sprint(he.Message))
+		} else {
+			c.NoContent(http.StatusInternalServerError)
+		}
+		c.Logger().Error(err)
+	}
+
 	e.GET("/", indexHandle)
 
 	e.POST("/registration/start", startRegistration)
 	e.POST("/registration/finish", finishRegistration)
 	e.POST("/authentication/start", startAuthentication)
-	// e.POST("/authentication/finish", finishAuthentication)
+	e.POST("/authentication/finish", finishAuthentication)
 
 	e.GET("/users", listUsers)
 	e.DELETE("/users/:username", deleteUser)
@@ -138,43 +148,39 @@ type (
 	}
 )
 
+type registionResponse struct {
+	webauthn.ParsedRegistrationResponse
+	User webauthn.UserEntity `json:"user"`
+}
+
 func finishRegistration(c echo.Context) error {
-	b := webauthn.ParsedRegistrationResponse{}
+	b := registionResponse{}
 	// b := echo.Map{}
 	if err := c.Bind(&b); err != nil {
 		return err
 	}
-
 	log.Printf("body\n%#v\n", b)
 
 	entry := dbItem{}
-	err := db.Read(dbColletion, "mvndaai", &entry)
+	err := db.Read(dbColletion, b.User.Name, &entry)
 	if err != nil {
 		return err
 	}
-	webauthn.IsValidRegistration(b, entry.Challenge, "http://localhost:8080")
+
+	err = webauthn.ValidateRegistration(b.ParsedRegistrationResponse, entry.Challenge, "http://localhost:8080", false)
+	if err != nil {
+		return err
+	}
 
 	entry.Challenge = []byte{}
 	entry.CredentialID = string(b.CredentialID)
 	entry.PublicKey = "pubkey"
 	log.Printf("entry %#v", entry)
 
-	err = db.Write(dbColletion, "mvndaai", entry)
+	err = db.Write(dbColletion, b.User.Name, entry)
 	if err != nil {
 		return err
 	}
-
-	// log.Println("finish id:", b.ID)
-	// log.Println("finish rawID:", b.RawID)
-	// log.Println("finish type:", b.Type)
-
-	// log.Printf("finish ClientDataJSON decode: %#v\n", decodeClientData(b.Response.ClientDataJSON))
-	// log.Printf("finish AttestationObject: %#v\n", decodeAttestationObject(b.Response.AttestationObject))
-
-	// decodeAttestationObject(b.Response.AttestationObject)
-
-	// https://w3c.github.io/webauthn/#registering-a-new-credential
-
 	return c.NoContent(http.StatusCreated)
 }
 
@@ -212,6 +218,50 @@ func startAuthentication(c echo.Context) error {
 	})
 }
 
+type finishAuthBody struct {
+	Username string `json:"username"`
+}
+
+func finishAuthentication(c echo.Context) error {
+	// b := echo.Map{}
+	b := finishAuthBody{}
+	if err := c.Bind(&b); err != nil {
+		return err
+	}
+
+	log.Println("finish body", b)
+
+	entry := dbItem{}
+	err := db.Read(dbColletion, b.Username, &entry)
+	if err != nil {
+		return err
+	}
+
+	err = webauthn.ValidateAuthentication()
+	if err != nil {
+		return err
+	}
+
+	entry.Challenge = []byte{}
+	err = db.Write(dbColletion, b.Username, entry)
+	if err != nil {
+		return err
+	}
+
+	// log.Println("finish id:", b.ID)
+	// log.Println("finish rawID:", b.RawID)
+	// log.Println("finish type:", b.Type)
+
+	// log.Printf("finish ClientDataJSON decode: %#v\n", decodeClientData(b.Response.ClientDataJSON))
+	// log.Printf("finish AttestationObject: %#v\n", decodeAttestationObject(b.Response.AttestationObject))
+
+	// decodeAttestationObject(b.Response.AttestationObject)
+
+	// https://w3c.github.io/webauthn/#registering-a-new-credential
+
+	return c.NoContent(http.StatusCreated)
+}
+
 func listUsers(c echo.Context) error {
 	records, err := db.ReadAll(dbColletion)
 	if err != nil {
@@ -232,7 +282,7 @@ func listUsers(c echo.Context) error {
 }
 
 func deleteUser(c echo.Context) error {
-	username := c.Param("user")
+	username := c.Param("username")
 	log.Println("Deleting user:", username)
 	if err := db.Delete(dbColletion, username); err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, err.Error())
