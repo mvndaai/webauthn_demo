@@ -15,6 +15,7 @@ Use [telebit](https://telebit.cloud/) or howereve else you want to make the site
 ## Enabling WebAuthN in Chrome
 
 Chrome has flags that my need to be enabled. Paste this into the omnibar:
+
 chrome://flags/#enable-web-authentication-api
 
 MacOS Touch ID:
