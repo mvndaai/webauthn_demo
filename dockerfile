@@ -7,8 +7,6 @@ RUN apk update && \
     apk upgrade && \
     apk add git
 
-RUN go get -d github.com/nanobox-io/golang-scribble
-RUN go get -d github.com/labstack/echo
+RUN go get -v ./...
 
-RUN go install -v ./...
 CMD ["app"]
