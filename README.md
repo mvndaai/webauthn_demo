@@ -2,13 +2,30 @@
 
 Example of WebAuthN for a presentation.
 
-## Requirements
+## Server setup
 
-Chrome Dev Mobile - https://play.google.com/store/apps/details?id=com.chrome.dev
+To run the server just run this docker command
 
-WebAuthN flag enabled - chrome://flags/#enable-web-authentication-api
+```bash
+docker build -t webauthndemo . && docker run -p 127.0.0.1:8080:8080 -it webauthndemo
+```
 
-## Flow
+Use [telebit](https://telebit.cloud/) or howereve else you want to make the site avaliable on a mobile device
+
+## Enabling WebAuthN in Chrome
+
+Chrome has flags that my need to be enabled. Paste this into the omnibar:
+chrome://flags/#enable-web-authentication-api
+
+MacOS Touch ID:
+chrome://flags/#enable-web-authentication-touch-id
+
+## Spec Variables
+
+https://w3c.github.io/webauthn/#idl-index
+
+
+## Notes
 
 ### Registration
 
@@ -33,18 +50,3 @@ Google IO demo https://youtu.be/kGGMgEfSzMw?t=30m4s
 2. The browser extracts the domain name and sends it with the challend and the crendential id to the authenticator.
 3. The authenticator checks the domain name then creates a signature and sends it back through the web app to the server
 4. The server uses the signature to check if the public key and challenge match, and if so invalidates the challenge and considers the user logged in.
-
-### Server setup
-
-To run the server just run this docker command
-
-```bash
-docker build -t webauthndemo . && docker run -p 127.0.0.1:8080:8080 -it webauthndemo
-```
-
-Use [telebit](https://telebit.cloud/) or howereve else you want to make the site avaliable on a mobile device
-
-
-# Spec Variables
-
-https://w3c.github.io/webauthn/#idl-index
