@@ -10,7 +10,7 @@ To run the server just run this docker command
 docker build -t webauthndemo . && docker run -p 127.0.0.1:8080:8080 -it webauthndemo
 ```
 
-Use [telebit](https://telebit.cloud/) or howereve else you want to make the site avaliable on a mobile device
+[Telebit](https://telebit.cloud/) can be used to make this avaliable outside [localhost](http://localhost:8080/)
 
 ## Enabling WebAuthN in Chrome
 
