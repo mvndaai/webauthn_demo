@@ -25,7 +25,6 @@ chrome://flags/#enable-web-authentication-touch-id
 
 https://w3c.github.io/webauthn/#idl-index
 
-
 ## Notes
 
 ### Registration

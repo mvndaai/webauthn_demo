@@ -85,13 +85,13 @@ func startRegistration(c echo.Context) error {
 		return err
 	}
 
+	u.ID = []byte(uuid.New().String())
 	log.Printf("Saving registration data %#v challenge:%s", u, base64Encode(chal))
 	err = db.Write(dbColletion, u.Name, dbItem{User: u, Challenge: chal})
 	if err != nil {
 		return err
 	}
 
-	u.ID = []byte(uuid.New().String())
 	r := webauthn.RegistrationParts{
 		PublicKey: webauthn.PublicKeyCredentialOptions{
 			Challenge: chal,
@@ -175,6 +175,11 @@ func startAuthentication(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	entry.Challenge = chal
+	err = db.Write(dbColletion, b.Name, entry)
+	if err != nil {
+		return err
+	}
 
 	return c.JSON(http.StatusCreated, startAuthResponse{
 		Challenge:    base64Encode(chal),
@@ -194,6 +199,7 @@ func finishAuthentication(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	chal := entry.Challenge
 
 	// Cleanup challenge
 	entry.Challenge = []byte{}
@@ -202,7 +208,7 @@ func finishAuthentication(c echo.Context) error {
 		return err
 	}
 
-	err = webauthn.ValidateAuthentication(b.PublicKeyCredential, entry.Challenge)
+	err = webauthn.ValidateAuthentication(b.PublicKeyCredential, chal, "http://localhost:8080", string(entry.User.ID))
 	if err != nil {
 		return err
 	}
