@@ -15,6 +15,7 @@ import (
 )
 
 var port = flag.String("port", ":8080", "Port the server starts on")
+var origin = flag.String("origin", "http://localhost:8080", "Origin used in verification")
 var timeout = flag.Int("timeout", 6000, "Time till auth timeout in ms")
 
 var db *scribble.Driver
@@ -132,7 +133,7 @@ func finishRegistration(c echo.Context) error {
 		return err
 	}
 
-	err = webauthn.ValidateRegistration(b.PublicKeyCredential, entry.Challenge, "http://localhost:8080", false)
+	err = webauthn.ValidateRegistration(b.PublicKeyCredential, entry.Challenge, *origin, false)
 	if err != nil {
 		db.Delete(dbColletion, b.User.Name)
 		log.Println("Registation Validation failed", err)
@@ -208,7 +209,7 @@ func finishAuthentication(c echo.Context) error {
 		return err
 	}
 
-	err = webauthn.ValidateAuthentication(b.PublicKeyCredential, chal, "http://localhost:8080", string(entry.User.ID))
+	err = webauthn.ValidateAuthentication(b.PublicKeyCredential, chal, *origin, string(entry.User.ID))
 	if err != nil {
 		return err
 	}
