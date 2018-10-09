@@ -4,13 +4,34 @@ Example of WebAuthN for a presentation.
 
 ## Server setup
 
+
+### Docker
+
 To run the server just run this docker command
 
 ```bash
 docker build -t webauthndemo . && docker run -p 127.0.0.1:8080:8080 -it webauthndemo
 ```
 
-[Telebit](https://telebit.cloud/) can be used to make this avaliable outside [localhost](http://localhost:8080/)
+### Git & Golang
+
+Or you can run it on your device:
+
+```bash
+git clone https://github.com/mvndaai/webauthn_demo.git
+pushd webauthn_demo
+go run . -p 8080
+```
+
+## Share & Test
+
+And you can use [Telebit](https://telebit.cloud/) to make it avaliable outside [localhost](http://localhost:8080/):
+
+```bash
+telebit http 8080 webauthn
+
+> Forwarding https://webauthn.YOURDOMAIN.telebit.io -> localhost:8080
+```
 
 ## Enabling WebAuthN in Chrome
 
