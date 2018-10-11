@@ -4,22 +4,23 @@ Example of WebAuthN for a presentation.
 
 ## Server setup
 
+### Downloading from Git
 
-### Docker
+```bash
+git clone https://github.com/mvndaai/webauthn_demo.git
+pushd webauthn_demo
+```
 
-To run the server just run this docker command
+### Run from Dockerfile
 
 ```bash
 docker build -t webauthndemo . && docker run -p 127.0.0.1:8080:8080 -it webauthndemo
 ```
 
-### Git & Golang
-
-Or you can run it on your device:
+### Run using local Golang
 
 ```bash
-git clone https://github.com/mvndaai/webauthn_demo.git
-pushd webauthn_demo
+go get -v ./...
 go run . -p 8080
 ```
 
