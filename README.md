@@ -1,6 +1,6 @@
 # Webauthn Demo
 
-Example of WebAuthN for a presentation.
+Example of WebAuthn for a presentation.
 
 ## Server setup
 
@@ -37,7 +37,7 @@ telebit http 8080 webauthn
 > Forwarding https://webauthn.YOURDOMAIN.telebit.io -> localhost:8080
 ```
 
-## Enabling WebAuthN in Chrome
+## Enabling WebAuthn in Chrome
 
 Chrome has flags that my need to be enabled. Paste this into the omnibar:
 
@@ -50,23 +50,9 @@ chrome://flags/#enable-web-authentication-touch-id
 
 https://w3c.github.io/webauthn/#idl-index
 
-## Notes
-
-### Registration
-
-https://developer.mozilla.org/en-US/docs/Web/API/Web_Authentication_API#Registration
-
-Google IO demo https://youtu.be/kGGMgEfSzMw?t=27m22s
-
-### Authentication
-
-https://developer.mozilla.org/en-US/docs/Web/API/Web_Authentication_API#Authentication
-
-Google IO demo https://youtu.be/kGGMgEfSzMw?t=30m4s
-
 ### Other Demos
 
-* Duo Labs has a working Golang demo if this doesn't suffice ([code](https://github.com/duo-labs/webauthn))
-* Google [Java demo](https://webauthndemo.appspot.com/) ([code](https://github.com/google/webauthndemo))
-* https://webauthn.org/
-* https://demo.yubico.com/webauthn/
+* Duo Labs  [golang code](https://github.com/duo-labs/webauthn)
+* Google https://webauthndemo.appspot.com/ ([java code](https://github.com/google/webauthndemo))
+* WebAuthn org https://webauthn.org
+* Yubico https://demo.yubico.com/webauthn/

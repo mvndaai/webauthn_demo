@@ -62,6 +62,7 @@ func main() {
 	e.GET("/users", listUsers)
 	e.DELETE("/users/:username", deleteUser)
 
+	fmt.Printf("origin set to: %s\n", *origin)
 	e.Logger.Fatal(e.Start(*port))
 }
 
