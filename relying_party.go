@@ -39,9 +39,14 @@ func main() {
 	e.HideBanner = true
 	e.HTTPErrorHandler = func(err error, c echo.Context) {
 		if he, ok := err.(*echo.HTTPError); ok {
+			if he.Code == http.StatusNotFound {
+				c.Logger().Error("route not found: ", c.Request().URL.String())
+				c.NoContent(he.Code)
+				return
+			}
 			c.String(he.Code, fmt.Sprint(he.Message))
 		} else {
-			c.NoContent(http.StatusInternalServerError)
+			c.String(http.StatusInternalServerError, err.Error())
 		}
 		c.Logger().Error(err)
 	}

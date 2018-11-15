@@ -1,37 +1,48 @@
 <!DOCTYPE html>
 <html>
     <head>
-        <title>WebAuthN Demo</title>
+        <title>WebAuthn Demo</title>
         <meta name="viewport" content="width=device-width, initial-scale=1">
+        <!-- skip favicon --> <link rel="shortcut icon" href="data:image/x-icon;," type="image/x-icon">
+        <!-- <script src="https://rawgit.com/paroga/cbor-js/master/cbor.js" type="text/javascript"></script> -->
+        <script src="https://rawgit.com/mvndaai/webauthn/master/webauthnHelper.js" type="text/javascript"></script>
+        <script src='//unpkg.com/mithril/mithril.js'></script>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.4.3/css/bulma.min.css" integrity="sha256-VC9bpAao257nf22leBRLU7AqKGwS9/Ylz8hfpHmOob4=" crossorigin="anonymous">
         <style type="text/css">
-            thead td { width: 200px; }
-            td {
-                max-width: 180px;
-                overflow: hidden;
-                text-overflow: ellipsis;
-            }
-            .banner {
-                min-height: 18px;
-                text-align: center;
-                background-color: black;
-                color: white;
+            .notification {
+                position: absolute;
+                margin: 0 auto;
+                left: 0;
+                right: 0;
+                top: 30px;
+                max-width: 80vw;
+                z-index: 100;
             }
         </style>
     </head>
     <body>
-        <!-- <script src="https://rawgit.com/paroga/cbor-js/master/cbor.js" type="text/javascript"></script> -->
-        <script src="https://rawgit.com/mvndaai/webauthn/master/webauthnHelper.js" type="text/javascript"></script>
-        <script src='//unpkg.com/mithril/mithril.js'></script>
         <script>
-            let bannerText = '';
-            function updateBannerText(...s) { console.log(...s); bannerText = s.join('-'); }
+            let toasts = [];
+            const Toast = {
+                close: () => { toasts.pop(); m.redraw(); },
+                view: (vnode) => toasts.length > 0 && m('.notification',{
+                    class: toasts[0].error ? "is-danger" : "is-success",
+                    oncreate() { this.timeoutId = window.setTimeout(vnode.state.close, 5000); },
+                    onremove() { window.clearTimeout(this.timeoutId); this.timeoutId = null; },
+                }, [
+                    m('button.delete', {onclick: vnode.state.close}),
+                    toasts[0].text,
+                ])
+            };
 
             let users = [];
-            function updateUsers() { return m.request('/users').then(r => users = r); }
+            function updateUsers() { return m.request('/users').then(r => users = r, () => users = []); }
 
             function register(username, displayName) {
-                updateBannerText("Attempting to register", username, displayName);
-                let user = { name: username, displayName: displayName }
+                //TODO - Add origin and device name
+
+                console.log("Attempting to register", username, displayName)
+                let user = { name: username, displayName: displayName, origin: window.location.origin}
                 m.request({ method: "POST", url: "/registration/start", data: user, })
                 .then(r => {
                     r.publicKey.challenge = webauthnHelper.strToBin(r.publicKey.challenge);
@@ -54,13 +65,13 @@
                     return m.request({ method: 'POST', url: '/registration/finish', data: body });
                 })
                 .then(r => {
-                    // console.log("repsonse from /registration/finish/", r);
-                    updateBannerText('Registration complete', username);
+                    console.log("repsonse from /registration/finish/", r);
+                    toasts.push({text: `Registartion complete for username: ${username}`});
                     updateUsers();
                 })
                 .catch(e => {
-                    bannerText = e.toString();
                     console.error(e)
+                    toasts.push({error: true, text: e.toString()});
                     updateUsers();
                 });
             }
@@ -68,18 +79,32 @@
             const RegisterUser = {
                 username: sessionStorage.getItem('regUsername'),
                 displayName: sessionStorage.getItem('regDisplayName'),
-                view: vnode => m('', [
-                    m('h2', "Register new user"),
-                    m('label', 'Username', m('input', {
-                        autocapitalize:'off',
-                        value: vnode.state.username,
-                        oninput: e => sessionStorage.setItem('regUsername', vnode.state.username = e.target.value),
-                    })), m('br'),
-                    m('label', 'Display Name', m('input', {
-                        value: vnode.state.displayName,
-                        oninput: e => sessionStorage.setItem('regDisplayName', vnode.state.displayName = e.target.value),
-                    })), m('br'),
-                    m('button', {onclick: _ => register(vnode.state.username, vnode.state.displayName)}, 'register'),
+                deviceName: sessionStorage.getItem('regDeviceName'),
+                view: vnode => m('.tile.is-child.box.is-primary', [
+                    m('h2.title.is-2', 'Register New User'),
+                    m('form', {
+                        onsubmit: e => {
+                            e.preventDefault();
+                            console.log("submitting");
+                            register(vnode.state.username, vnode.state.displayName, vnode.state.deviceName);
+                        },
+                    }, [
+                        m('.field', [
+                            m('label.label', 'Username'),
+                            m('control', m('input', {
+                                value: vnode.state.username, autocapitalize:'off',
+                                oninput: e => sessionStorage.setItem('regUsername', vnode.state.username = e.target.value),
+                            })),
+                        ]),
+                        m('.field', [
+                            m('label.label', 'Display Name'),
+                            m('control', m('input', {
+                                value: vnode.state.displayName,
+                                oninput: e => sessionStorage.setItem('regDisplayName', vnode.state.displayName = e.target.value),
+                            })),
+                        ]),
+                        m('button.button', {type: 'submit'}, 'Register'),
+                    ]),
                 ])
             }
 
@@ -94,12 +119,11 @@
                             challenge: webauthnHelper.strToBin(o.challenge),
                             allowCredentials: [{
                                 id: webauthnHelper.strToBin(o.credentialId),
-                                transports: ["usb", "nfc", "ble"],
+                                transports: ["usb", "nfc", "ble", "internal"],
                                 type: "public-key"
                             }],
                         },
                     };
-                    // console.log("what", getCredentialArgs);
                     return navigator.credentials.get(getCredentialArgs)
                 })
                 .then((assertion) => {
@@ -109,55 +133,60 @@
                 })
                 .then(r => {
                     updateUsers(); // Remove the challenge
+                    toasts.push({text: "Authentication successful"});
                     console.log(r);
                 })
                 .catch((e) => {
                     updateUsers(); // Remove the challenge
-                    bannerText = e.toString();
+                    toasts.push({error: true, text: e.toString()});
                     console.error(e);
                 })
             };
 
-            const LoginAsUser = {
+            const AuthenticateUser = {
                 username: sessionStorage.getItem('loginUsername'),
-                view: vnode => m("", [
-                    m('h2', "Login as user"),
-                    m('label', 'Username', m('input', {
-                        autocapitalize:"off",
-                        value: vnode.state.username,
-                        oninput: e => sessionStorage.setItem('loginUsername', vnode.state.username = e.target.value),
-                    })), m('br'),
-                    m('button', {onclick: _ => login(vnode.state.username)},'login')
+                view: vnode => m('.tile.is-child.box.is-info', [
+                    m('h2.title.is-2', 'Authenticate User'),
+                    (users.length == 0) ? 'No users registered' : [
+                        m('table.table.is-striped', [
+                            m('thead.thead', [
+                                m('th.th', 'Username'),
+                                m('th.th', 'Display Name'),
+                                m('th.th'), m('th.th'),
+                            ]),
+                            m('tbody.tbody',
+                                users.map(u => m('tr.tr', [
+                                    m('td.td', u.user.name),
+                                    m('td.td', u.user.displayName),
+                                    m('td.td', m('button.button', {onclick: () => login(u.user.name)}, 'Auth')),
+                                    m('td.td', m('button.button.is-danger', {onclick: () => deleteUser(u.user.name)}, 'Delete')),
+                                    // credentialId,
+                                    // challenge
+                                    // device name
+                                    // origin
+                                ]))
+                            ),
+                        ]),
+                    ]
                 ])
             }
 
             function deleteUser(username) {
                 console.log('Deleting user:', username)
-                return m.request({method:'DELETE', url: `/users/${username}`}).then(_ => updateUsers());
+                return m.request({method:'DELETE', url: `/users/${username}`}).then(updateUsers, updateUsers);
             }
-
-            const Userlist = {
-                view: vnode => m('', [
-                m('h2', "Registered users"),
-                    m('table', [
-                        m('thead', ['Username', 'Display Name', 'Challenge', 'Credential Id', 'Public Key', ''].map(v => m('td', v))),
-                        m('tbody', users.map(u => m('tr',[
-                            u.user.name, u.user.displayName, u.challenge, u.credentialId, u.publicKey,
-                            m('button', {onclick: _ => deleteUser(u.user.name) },'delete')
-                        ].map(v => m('td', v))),
-                        ))
-                    ])
-                ])
-            };
 
             const Layout = {
                 oninit: updateUsers(),
-                view: _ => m('', [
-                    m('.banner', bannerText),
-                    m('h1', 'WebAuthN'),
-                    m(RegisterUser),
-                    m(LoginAsUser),
-                    (users.length !== 0) && m(Userlist),
+                view: () => m('.container',[
+                    m(Toast),
+                    m('section.hero.is-dark', m('.hero-body', m('.container',
+                        m('h1.title', 'WebAuthn Demo')))
+                    ),
+                    m('.tile.is-ancestor', m('.tile.is-parent', [
+                        m(RegisterUser),
+                        m(AuthenticateUser),
+                    ])),
                 ])
             };
 

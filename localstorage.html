@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html>
     <head>
-        <title>WebAuthN Demo</title>
+        <title>WebAuthN LocalStorage Demo</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
         <style type="text/css">
             thead td { width: 200px; }
             td {
@@ -70,7 +71,6 @@
                         pubKeyCredParams: [{ type: "public-key", alg: -7 }],
                         attestation: "direct",
                         timeout: 60000,
-
                         challenge: challenge,
                         user: {
                             id: new Uint8Array(16),
@@ -136,18 +136,18 @@
                 let challenge = createChallenge();
                 updateUser(username, challenge)
 
+                let getCredentialArgs = {
+                    publicKey: {
+                        timeout: 60000,
+                        challenge: challenge,
+                        allowCredentials : [{
+                            id: strToBin(user.credentialId),
+                            transports: ["usb", "nfc", "ble"],
+                            type: "public-key"
+                        }],
+                    },
+                };
 
-                    let getCredentialArgs = {
-                        publicKey: {
-                            timeout: 60000,
-                            challenge: challenge,
-                            allowCredentials : [{
-                                id: strToBin(user.credentialId),
-                                transports: ["usb", "nfc", "ble"],
-                                type: "public-key"
-                            }],
-                        },
-                    };
                 return navigator.credentials.get(getCredentialArgs)
                     .then(assertion => {
                         updateBannerText("user authenticated", username);
