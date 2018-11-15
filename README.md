@@ -14,15 +14,18 @@ pushd webauthn_demo
 ### Run from Dockerfile
 
 ```bash
-docker build -t webauthndemo . && docker run -p 127.0.0.1:8080:8080 -it webauthndemo
+docker build -t webauthndemo . && docker run -p 127.0.0.1:8080:8080 -it webauthndemo -port :8080 -origin https://example.com
 ```
+
+Note: port and origin should match your configuration
 
 ### Run using local Golang
 
 ```bash
 go get -v ./...
-go run . -p 8080
+go run . -port :8080 -origin https://example.com
 ```
+Note: port and origin should match your configuration
 
 ## Share & Test
 

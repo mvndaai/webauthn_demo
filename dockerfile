@@ -9,4 +9,4 @@ RUN apk update && \
 
 RUN go get -v ./...
 
-CMD ["app"]
+ENTRYPOINT ["app"]
