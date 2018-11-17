@@ -69,7 +69,7 @@
                     return m.request({ method: 'POST', url: '/registration/finish', data: body });
                 })
                 .then(r => {
-                    console.log("repsonse from /registration/finish/", r);
+                    // console.log("repsonse from /registration/finish/", r);
                     toasts.push({text: `Registartion complete for username: ${username}`});
                     updateUsers();
                 })
@@ -89,7 +89,6 @@
                     m('form', {
                         onsubmit: e => {
                             e.preventDefault();
-                            console.log("submitting");
                             register(vnode.state.username, vnode.state.displayName, vnode.state.deviceName);
                         },
                     }, [
@@ -138,7 +137,7 @@
                 .then(r => {
                     updateUsers(); // Remove the challenge
                     toasts.push({text: "Authentication successful"});
-                    console.log(r);
+                    // console.log(r);
                 })
                 .catch((e) => {
                     updateUsers(); // Remove the challenge
