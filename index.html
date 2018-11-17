@@ -28,8 +28,8 @@
         <script>
             let toasts = [];
             const Toast = {
-                close: () => { toasts.pop(); m.redraw(); },
-                view: (vnode) => toasts.length > 0 && m('.notification',{
+                close: () => { toasts.shift(); m.redraw(); },
+                view: vnode => toasts.length > 0 && m('.notification', {
                     class: toasts[0].error ? "is-danger" : "is-success",
                     oncreate() { this.timeoutId = window.setTimeout(vnode.state.close, 5000); },
                     onremove() { window.clearTimeout(this.timeoutId); this.timeoutId = null; },
@@ -123,7 +123,7 @@
                             challenge: webauthnHelper.strToBin(o.challenge),
                             allowCredentials: [{
                                 id: webauthnHelper.strToBin(o.credentialId),
-                                transports: ["usb", "nfc", "ble"],
+                                transports: ["usb", "nfc", "ble", "internal"],
                                 type: "public-key"
                             }],
                         },
