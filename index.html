@@ -40,14 +40,22 @@
             };
 
             let users = [];
-            function updateUsers() { return m.request('/users').then(r => users = r, () => users = []); }
+            function updateUsers() { return m.request('/users').then(r => users = r, () => users = []).then(r => console.log(r)); }
 
-            function register(username, displayName) {
+            function register(username, displayName, deviceName) {
                 //TODO - Add origin and device name
 
-                console.log("Attempting to register", username, displayName)
+                console.log("Attempting to register", username, displayName, deviceName)
+
+                let data = {
+                    deviceName: deviceName,
+                    origin: window.location.origin,
+                    user: { name: username, displayName: displayName },
+                }
+
+
                 let user = { name: username, displayName: displayName, origin: window.location.origin}
-                m.request({ method: "POST", url: "/registration/start", data: user, })
+                m.request({ method: "POST", url: "/registration/start", data })
                 .then(r => {
                     r.publicKey.challenge = webauthnHelper.strToBin(r.publicKey.challenge);
                     r.publicKey.user.id = webauthnHelper.strToBin(r.publicKey.user.id);
@@ -66,6 +74,7 @@
 
                     let body = webauthnHelper.unwrapPublicKeyCredential(PublicKeyCredential);
                     body.user = user; // This is for the finding the user in the db
+                    body.deviceName = deviceName;
                     return m.request({ method: 'POST', url: '/registration/finish', data: body });
                 })
                 .then(r => {
@@ -106,15 +115,24 @@
                                 oninput: e => sessionStorage.setItem('regDisplayName', vnode.state.displayName = e.target.value),
                             })),
                         ]),
+                        m('.field', [
+                            m('label.label', 'Device Name'),
+                            m('control', m('input', {
+                                value: vnode.state.deviceName,
+                                oninput: e => sessionStorage.setItem('regDeviceName', vnode.state.deviceName = e.target.value),
+                            })),
+                        ]),
                         m('button.button', {type: 'submit'}, 'Register'),
                     ]),
                 ])
             }
 
-            function login(username){
-                let user = {name: username};
-                m.request({ method: "POST", url: "/authentication/start", data: user })
+            function login(username, deviceName){
+                let data = { deviceName, user:{name: username}};
+                m.request({ method: "POST", url: "/authentication/start", data })
                 .then(o => {
+                    console.log(o);
+
                     updateUsers(); // Show the new challenge
                     let getCredentialArgs = {
                         publicKey: {
@@ -131,7 +149,8 @@
                 })
                 .then((assertion) => {
                     let body = webauthnHelper.unwrapPublicKeyCredential(assertion)
-                    body.user = user; //TODO probably remove this
+                    body.user = {name: username}; //TODO probably remove this
+                    body.deviceName = deviceName;
                     return m.request({ method: "POST", url: "/authentication/finish", data: body });
                 })
                 .then(r => {
@@ -151,23 +170,41 @@
                 view: vnode => m('.tile.is-child.box.is-info', [
                     m('h2.title.is-2', 'Authenticate User'),
                     (users.length == 0) ? 'No users registered' : [
-                        m('table.table.is-striped', [
-                            m('thead.thead', [
-                                m('th.th', 'Username'),
-                                m('th.th', 'Display Name'),
-                                m('th.th'), m('th.th'),
-                            ]),
+                        m('table.table.is-striped.is-bordered.is-narrow', [
                             m('tbody.tbody',
-                                users.map(u => m('tr.tr', [
-                                    m('td.td', u.user.name),
-                                    m('td.td', u.user.displayName),
-                                    m('td.td', m('button.button', {onclick: () => login(u.user.name)}, 'Auth')),
-                                    m('td.td', m('button.button.is-danger', {onclick: () => deleteUser(u.user.name)}, 'Delete')),
-                                    // credentialId,
-                                    // challenge
-                                    // device name
-                                    // origin
-                                ]))
+                                users.map(u => [
+                                    m('tr.tr', [
+                                        m('td.td',u.user.name),
+                                        m('td.td',u.user.displayName),
+                                        m('td.td',m('button.button.is-danger', {onclick: () => deleteUser(u.user.name)}, 'Delete')),
+                                    ]),
+                                    m('tr.tr', m('td', {colspan:'3'}, [
+                                        u.devices && m('table.table.is-striped', [
+                                            // m('thead.thead', [
+                                            // m('th.th'),
+                                            //     m('th.th', 'Name'),
+                                            //     // m('th.th', 'credentialId'),
+                                            //     // m('th.th', 'challenge'),
+                                            //     // m('th.th', 'origin'),
+                                            //     m('th.th'),
+                                            // ]),
+                                            m('tbody.tbody',
+                                                // JSON.stringify(u.devices),
+                                                Object.keys(u.devices).map(k =>
+                                                    m('tr.tr', [
+                                                        m('td.td', m('button.button.is-small', {onclick: () => login(u.user.name, u.devices[k].name)}, 'Auth')),
+                                                        m('td.td', u.devices[k].name),
+                                                        // m('td.td', u.devices[k].credentialId),
+                                                        // m('td.td', u.devices[k].challenge),
+                                                        m('td.td', u.devices[k].origin),
+                                                        m('td.td', m('button.button.is-small.is-danger', {onclick: () => deleteDevice(u.user.name, u.devices[k].name)}, 'Delete')),
+                                                    ]),
+
+                                                ),
+                                            ),
+                                        ]),
+                                    ])),
+                                ]),
                             ),
                         ]),
                     ]
@@ -177,6 +214,11 @@
             function deleteUser(username) {
                 console.log('Deleting user:', username)
                 return m.request({method:'DELETE', url: `/users/${username}`}).then(updateUsers, updateUsers);
+            }
+
+            function deleteDevice(username, deviceName) {
+                console.log('Deleting device:', username, deviceName)
+                return m.request({method:'DELETE', url: `/users/${username}/${deviceName}`}).then(updateUsers, updateUsers);
             }
 
 

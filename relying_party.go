@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo"
@@ -23,11 +24,16 @@ var db *scribble.Driver
 const dbColletion = "users"
 
 type (
+	dbDevice struct {
+		Name         string `json:"name"`
+		Origin       string `json:"origin"`
+		Challenge    []byte `json:"challenge"`
+		CredentialID string `json:"credentialId"`
+	}
+
 	dbItem struct {
-		User         webauthn.UserEntity `json:"user"`
-		Challenge    []byte              `json:"challenge"`
-		CredentialID string              `json:"credentialId"`
-		PublicKey    string              `json:"publicKey"`
+		User    webauthn.UserEntity  `json:"user"`
+		Devices map[string]*dbDevice `json:"devices"`
 	}
 )
 
@@ -61,8 +67,8 @@ func main() {
 
 	e.GET("/users", listUsers)
 	e.DELETE("/users/:username", deleteUser)
+	e.DELETE("/users/:username/:deviceName", deleteDevice)
 
-	fmt.Printf("origin set to: %s\n", *origin)
 	e.Logger.Fatal(e.Start(*port))
 }
 
@@ -72,32 +78,55 @@ func indexHandle(c echo.Context) error {
 
 type (
 	startRegistrationResponse struct {
-		Challenge string              `json:"challenge"`
-		User      webauthn.UserEntity `json:"user"`
+		DeviceName string              `json:"deviceName"`
+		Origin     string              `json:"origin"`
+		User       webauthn.UserEntity `json:"user"`
 	}
 )
 
 func startRegistration(c echo.Context) error {
-	u := webauthn.UserEntity{}
-	if err := json.NewDecoder(c.Request().Body).Decode(&u); err != nil {
+	b := startRegistrationResponse{}
+	if err := json.NewDecoder(c.Request().Body).Decode(&b); err != nil {
 		return err
 	}
-	if u.Name == "" {
+	if b.User.Name == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "username required")
 	}
 
-	log.Println("Starting registation for:", u.Name)
+	log.Println("Starting registation for:", b.User.Name)
 	chal, err := webauthn.NewChallenge()
 	if err != nil {
 		return err
 	}
 
-	u.ID = []byte(uuid.New().String())
-	log.Printf("Saving registration data %#v challenge:%s", u, base64Encode(chal))
-	err = db.Write(dbColletion, u.Name, dbItem{User: u, Challenge: chal})
+	entry := dbItem{}
+
+	err = db.Read(dbColletion, b.User.Name, &entry)
+	if err != nil {
+		// This error should happen unless adding a device to an existing user
+		if !strings.HasPrefix(err.Error(), "stat") {
+			return err
+		}
+		entry.User.ID = []byte(uuid.New().String())
+		entry.User.Name = b.User.Name
+	}
+	entry.User.DisplayName = b.User.DisplayName
+
+	if entry.Devices == nil {
+		entry.Devices = map[string]*dbDevice{}
+	}
+	entry.Devices[b.DeviceName] = &dbDevice{
+		Name:      b.DeviceName,
+		Origin:    b.Origin,
+		Challenge: chal,
+	}
+
+	log.Printf("user %#v\n", entry.User)
+	err = db.Write(dbColletion, b.User.Name, entry)
 	if err != nil {
 		return err
 	}
+	log.Println("def")
 
 	r := webauthn.RegistrationParts{
 		PublicKey: webauthn.PublicKeyCredentialOptions{
@@ -112,7 +141,7 @@ func startRegistration(c echo.Context) error {
 				},
 			},
 			Timeout:     50000,
-			User:        u,
+			User:        entry.User,
 			Attestation: "direct",
 		},
 	}
@@ -123,7 +152,8 @@ func startRegistration(c echo.Context) error {
 type (
 	finishResponse struct {
 		webauthn.PublicKeyCredential
-		User webauthn.UserEntity `json:"user"`
+		User       webauthn.UserEntity `json:"user"`
+		DeviceName string              `json:"deviceName"`
 	}
 )
 
@@ -139,16 +169,20 @@ func finishRegistration(c echo.Context) error {
 		return err
 	}
 
-	err = webauthn.ValidateRegistration(b.PublicKeyCredential, entry.Challenge, *origin, false)
+	// log.Printf("b.PublicKeyCredential %#v\n", b.PublicKeyCredential)
+	log.Printf("entry.Devices[b.deviceName].Challenge %s %#v\n", b.DeviceName, entry.Devices)
+
+	err = webauthn.ValidateRegistration(b.PublicKeyCredential, entry.Devices[b.DeviceName].Challenge, *origin, false)
 	if err != nil {
-		db.Delete(dbColletion, b.User.Name)
+		delete(entry.Devices, b.DeviceName)
 		log.Println("Registation Validation failed", err)
 		// return err //TODO enanable once registartion is complete
 	}
 
-	entry.Challenge = []byte{}
-	entry.CredentialID = string(b.RawID)
-	// entry.PublicKey = "TODO-PUBKEY"
+	device := entry.Devices[b.DeviceName]
+	device.Challenge = nil
+	device.CredentialID = string(b.RawID)
+	entry.Devices[b.DeviceName] = device
 
 	err = db.Write(dbColletion, b.User.Name, entry)
 	if err != nil {
@@ -162,35 +196,41 @@ type (
 	startAuthResponse struct {
 		Challenge    string              `json:"challenge"`
 		CredentialID string              `json:"credentialId"`
+		DeviceName   string              `json:"deviceName"`
 		User         webauthn.UserEntity `json:"user"`
 	}
 )
 
 func startAuthentication(c echo.Context) error {
-	b := webauthn.UserEntity{}
+	b := startAuthResponse{}
 	if err := c.Bind(&b); err != nil {
 		return err
 	}
-
+	log.Println("startAuthentication", b)
 	entry := dbItem{}
-	err := db.Read(dbColletion, b.Name, &entry)
+	err := db.Read(dbColletion, b.User.Name, &entry)
 	if err != nil {
 		return err
 	}
+	log.Println("entry", entry)
 
 	chal, err := webauthn.NewChallenge()
 	if err != nil {
 		return err
 	}
-	entry.Challenge = chal
-	err = db.Write(dbColletion, b.Name, entry)
+
+	device := entry.Devices[b.DeviceName]
+	device.Challenge = chal
+	entry.Devices[b.DeviceName] = device
+
+	err = db.Write(dbColletion, b.User.Name, entry)
 	if err != nil {
 		return err
 	}
 
 	return c.JSON(http.StatusCreated, startAuthResponse{
 		Challenge:    base64Encode(chal),
-		CredentialID: entry.CredentialID,
+		CredentialID: device.CredentialID,
 	})
 }
 
@@ -200,21 +240,26 @@ func finishAuthentication(c echo.Context) error {
 	if err := c.Bind(&b); err != nil {
 		return err
 	}
+	log.Println("finishAuthentication", b)
 
 	entry := dbItem{}
 	err := db.Read(dbColletion, b.User.Name, &entry)
 	if err != nil {
 		return err
 	}
-	chal := entry.Challenge
+	log.Println("entry", entry)
+	chal := entry.Devices[b.DeviceName].Challenge
 
 	// Cleanup challenge
-	entry.Challenge = []byte{}
+	device := entry.Devices[b.DeviceName]
+	device.Challenge = nil
+	entry.Devices[b.DeviceName] = device
 	err = db.Write(dbColletion, b.User.Name, entry)
 	if err != nil {
 		return err
 	}
 
+	log.Println("b.PublicKeyCredential, chal, *origin, string(entry.User.ID)", b.PublicKeyCredential, chal, *origin, string(entry.User.ID))
 	err = webauthn.ValidateAuthentication(b.PublicKeyCredential, chal, *origin, string(entry.User.ID))
 	if err != nil {
 		return err
@@ -248,6 +293,25 @@ func deleteUser(c echo.Context) error {
 	if err := db.Delete(dbColletion, username); err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, err.Error())
 	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+func deleteDevice(c echo.Context) error {
+	username := c.Param("username")
+	deviceName := c.Param("deviceName")
+
+	entry := dbItem{}
+	err := db.Read(dbColletion, username, &entry)
+	if err != nil {
+		return err
+	}
+
+	delete(entry.Devices, deviceName)
+	err = db.Write(dbColletion, username, entry)
+	if err != nil {
+		return err
+	}
+
 	return c.NoContent(http.StatusNoContent)
 }
 
