@@ -176,7 +176,7 @@
                                     m('tr.tr', [
                                         m('td.td',u.user.name),
                                         m('td.td',u.user.displayName),
-                                        m('td.td',m('button.button.is-danger', {onclick: () => deleteUser(u.user.name)}, 'Delete')),
+                                        m('td.td',m('button.button.is-danger.is-small', {onclick: () => deleteUser(u.user.name)}, 'Delete User')),
                                     ]),
                                     m('tr.tr', m('td', {colspan:'3'}, [
                                         u.devices && m('table.table.is-striped', [
