@@ -273,9 +273,7 @@ func listUsers(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
-	if len(records) == 0 {
-		return echo.NewHTTPError(http.StatusNotFound, "No users found")
-	}
+
 	items := []dbItem{}
 	for _, r := range records {
 		item := dbItem{}
